@@ -15,6 +15,29 @@ import (
 	"os"
 )
 
+func grayscale(loadedImage image.Image, output_img *image.NRGBA, width int, height int) {
+	//loops through the whole array (all the pixels of the image) and calculates the average value of r, g, b
+	//by setting the average value as the value for each color we have a grayscale image
+	for i := 0; i < width; i++ {
+		for j := 0; j < height; j++ {
+			colors := loadedImage.At(i, j)
+			r, g, b, a := colors.RGBA()
+			r = uint32(map_int(int(r), 65535, 255))
+			g = uint32(map_int(int(g), 65535, 255))
+			b = uint32(map_int(int(b), 65535, 255))
+			a = uint32(map_int(int(a), 65535, 255))
+			avg := (r + g + b) / 3
+
+			output_img.Set(i, j, color.NRGBA{
+				R: uint8(avg),
+				G: uint8(avg),
+				B: uint8(avg),
+				A: uint8(a),
+			})
+		}
+	}
+}
+
 func main() {
 	// Read image from file that already exists
 	existingImageFile, err := os.Open("pic.png")
@@ -28,35 +51,17 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	colors := loadedImage.At(loadedImage.Bounds().Max.X-1, loadedImage.Bounds().Max.Y-1)
 	width := loadedImage.Bounds().Max.X
 	height := loadedImage.Bounds().Max.Y
 
-	fmt.Println("at function", colors)
 	output_img := image.NewNRGBA(image.Rect(0, 0, width, height))
 
-	//loops through the whole array (all the pixels of the image) and calculates the average value of r, g, b
-	//by setting the average value as the value for each color we have a grayscale image 
-	for i := 0; i < width; i++ {
-		for j := 0; j < height; j++ {
-			colors := loadedImage.At(i, j)
-			r, g, b, a := colors.RGBA()
-			r = uint32(map_int(int(r), 65535, 255))
-			g = uint32(map_int(int(g), 65535, 255))
-			b = uint32(map_int(int(b), 65535, 255))
-			a = uint32(map_int(int(a), 65535, 255))
-			avg := (r + g + b) / 3 
+	grayscale(loadedImage, output_img, width, height)
 
-			output_img.Set(i, j, color.NRGBA{
-				R: uint8(avg),
-				G: uint8(avg),
-				B: uint8(avg),
-				A: uint8(a),
-			})
-		}
-	}
-
-	f, err := os.Create("image.png")
+	dir_path := "output"
+	err = os.Mkdir(dir_path, 0755)
+	output_path := "./output/image.png"
+	f, err := os.Create(output_path)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -69,6 +74,8 @@ func main() {
 	if err := f.Close(); err != nil {
 		log.Fatal(err)
 	}
+
+	fmt.Println("Image generated at", output_path)
 }
 
 func map_int(to_map int, max_from int, max_to int) int {
