@@ -13,6 +13,7 @@ import (
 	"image/png"
 	"log"
 	"os"
+	"math"
 )
 
 func grayscale(loadedImage image.Image, output_img *image.NRGBA, width int, height int) {
@@ -38,6 +39,26 @@ func grayscale(loadedImage image.Image, output_img *image.NRGBA, width int, heig
 	}
 }
 
+func gaussian_blur(loadedImage image.Image, output_img *image.NRGBA, width int, height int, radius int) {
+	sigma := math.Max(float64((radius / 2)), 1)
+	pi := math.Pi
+	kernel_width := (2 * radius) + 1
+	conv_kernel := make([][]float64, kernel_width)
+	for i := range conv_kernel {
+		conv_kernel[i] = make([]float64, kernel_width)
+	}
+
+	for i := -radius; i < radius; i++ {
+		for j := -radius; j < radius; j++ {
+			divider := 2 * pi * sigma * sigma
+			exponential_numerator := float64(-(i * i + j + j))
+			exponential_denominator := 2 * sigma * sigma
+			conv_kernel[i + radius][j + radius] = float64((math.Exp(exponential_numerator/exponential_denominator)/divider))
+		}
+	}
+	fmt.Println(conv_kernel)
+}
+
 func main() {
 	// Read image from file that already exists
 	existingImageFile, err := os.Open("pic.png")
@@ -53,10 +74,12 @@ func main() {
 	}
 	width := loadedImage.Bounds().Max.X
 	height := loadedImage.Bounds().Max.Y
+	radius := 3
 
 	output_img := image.NewNRGBA(image.Rect(0, 0, width, height))
 
-	grayscale(loadedImage, output_img, width, height)
+	// grayscale(loadedImage, output_img, width, height)
+	gaussian_blur(loadedImage, output_img, width, height, radius)
 
 	dir_path := "output"
 	err = os.Mkdir(dir_path, 0755)
