@@ -14,6 +14,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"strconv"
 )
 
 func grayscale(loadedImage image.Image, output_img *image.NRGBA, width int, height int) {
@@ -74,10 +75,22 @@ func gaussian_blur(loadedImage image.Image, output_img *image.NRGBA, width int, 
 			for x := -radius; x < radius; x++ {
 				for y := -radius; y < radius; y++ {
 					gaussian_coefficient := conv_kernel[x+radius][y+radius]
-					if i+x < 0 || i+x >= width || j+y < 0 || j+y >= height {
-						continue
+					x_substitue := x
+					y_substitue := y
+					for i+x_substitue < 0 {
+						x_substitue++
 					}
-					image_colors := loadedImage.At(i+x, j+y)
+					for j+y_substitue < 0 {
+						y_substitue++
+					}
+					for i+x_substitue >= width {
+						x_substitue--
+					}
+					for j+y_substitue >= height {
+						y_substitue--
+					}
+
+					image_colors := loadedImage.At(i+x_substitue, j+y_substitue)
 					red_input, green_input, blue_input, a_input := image_colors.RGBA()
 					red_input = uint32(map_int(int(red_input), 65535, 255))
 					green_input = uint32(map_int(int(green_input), 65535, 255))
@@ -98,8 +111,6 @@ func gaussian_blur(loadedImage image.Image, output_img *image.NRGBA, width int, 
 			})
 		}
 	}
-
-	fmt.Println(conv_kernel)
 }
 
 func main() {
@@ -117,12 +128,32 @@ func main() {
 	}
 	width := loadedImage.Bounds().Max.X
 	height := loadedImage.Bounds().Max.Y
-	radius := 5
+	var gaussian_radius int
 
 	output_img := image.NewNRGBA(image.Rect(0, 0, width, height))
 
-	// grayscale(loadedImage, output_img, width, height)
-	gaussian_blur(loadedImage, output_img, width, height, radius)
+	arguments := os.Args[1:]
+	if len(arguments) == 0 {
+		fmt.Println("Provide at least on argument: the effect desired")
+		os.Exit(1)
+	}
+
+	if arguments[0] == "gaussian_blur" {
+		if len(arguments) < 2 {
+			fmt.Println("Provide a valid radius for the gaussian blur")
+			fmt.Println("The radius determines the strength of the blur. The bigger the radius, the stronger the blur")
+			os.Exit(1)
+		}
+		gaussian_radius, err = strconv.Atoi(arguments[1])
+		if err != nil {
+			fmt.Println("Provide a valid radius for the gaussian blur")
+			fmt.Println("The radius determines the strength of the blur. The bigger the radius, the stronger the blur")
+			os.Exit(1)
+		}
+		gaussian_blur(loadedImage, output_img, width, height, gaussian_radius)
+	} else if arguments[0] == "grayscale" {
+		grayscale(loadedImage, output_img, width, height)
+	}
 
 	dir_path := "output"
 	err = os.Mkdir(dir_path, 0755)
