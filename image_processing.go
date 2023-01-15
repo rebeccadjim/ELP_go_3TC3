@@ -12,8 +12,8 @@ import (
 	"image/color"
 	"image/png"
 	"log"
-	"os"
 	"math"
+	"os"
 )
 
 func grayscale(loadedImage image.Image, output_img *image.NRGBA, width int, height int) {
@@ -22,18 +22,18 @@ func grayscale(loadedImage image.Image, output_img *image.NRGBA, width int, heig
 	for i := 0; i < width; i++ {
 		for j := 0; j < height; j++ {
 			colors := loadedImage.At(i, j)
-			r, g, b, a := colors.RGBA()
-			r = uint32(map_int(int(r), 65535, 255))
-			g = uint32(map_int(int(g), 65535, 255))
-			b = uint32(map_int(int(b), 65535, 255))
-			a = uint32(map_int(int(a), 65535, 255))
-			avg := (r + g + b) / 3
+			red_input, green_input, blue_input, a_input := colors.RGBA()
+			red_input = uint32(map_int(int(red_input), 65535, 255))
+			green_input = uint32(map_int(int(green_input), 65535, 255))
+			blue_input = uint32(map_int(int(blue_input), 65535, 255))
+			a_input = uint32(map_int(int(a_input), 65535, 255))
+			avg := (red_input + green_input + blue_input) / 3
 
 			output_img.Set(i, j, color.NRGBA{
 				R: uint8(avg),
 				G: uint8(avg),
 				B: uint8(avg),
-				A: uint8(a),
+				A: uint8(a_input),
 			})
 		}
 	}
@@ -44,6 +44,7 @@ func gaussian_blur(loadedImage image.Image, output_img *image.NRGBA, width int, 
 	pi := math.Pi
 	kernel_width := (2 * radius) + 1
 	conv_kernel := make([][]float64, kernel_width)
+	kernel_sum := float64(0)
 	for i := range conv_kernel {
 		conv_kernel[i] = make([]float64, kernel_width)
 	}
@@ -51,11 +52,53 @@ func gaussian_blur(loadedImage image.Image, output_img *image.NRGBA, width int, 
 	for i := -radius; i < radius; i++ {
 		for j := -radius; j < radius; j++ {
 			divider := 2 * pi * sigma * sigma
-			exponential_numerator := float64(-(i * i + j + j))
+			exponential_numerator := float64(-(i*i + j + j))
 			exponential_denominator := 2 * sigma * sigma
-			conv_kernel[i + radius][j + radius] = float64((math.Exp(exponential_numerator/exponential_denominator)/divider))
+			conv_kernel[i+radius][j+radius] = float64((math.Exp(exponential_numerator/exponential_denominator) / divider))
+			kernel_sum += conv_kernel[i+radius][j+radius]
 		}
 	}
+	for i := 0; i < kernel_width; i++ {
+		for j := 0; j < kernel_width; j++ {
+			conv_kernel[i][j] /= kernel_sum
+		}
+	}
+
+	for i := 0; i < width; i++ {
+		for j := 0; j < height; j++ {
+			var red_output float64
+			var green_output float64
+			var blue_output float64
+			var a_output float64
+
+			for x := -radius; x < radius; x++ {
+				for y := -radius; y < radius; y++ {
+					gaussian_coefficient := conv_kernel[x+radius][y+radius]
+					if i+x < 0 || i+x >= width || j+y < 0 || j+y >= height {
+						continue
+					}
+					image_colors := loadedImage.At(i+x, j+y)
+					red_input, green_input, blue_input, a_input := image_colors.RGBA()
+					red_input = uint32(map_int(int(red_input), 65535, 255))
+					green_input = uint32(map_int(int(green_input), 65535, 255))
+					blue_input = uint32(map_int(int(blue_input), 65535, 255))
+					a_input = uint32(map_int(int(a_input), 65535, 255))
+
+					red_output += float64(red_input) * float64(gaussian_coefficient)
+					green_output += float64(green_input) * float64(gaussian_coefficient)
+					blue_output += float64(blue_input) * float64(gaussian_coefficient)
+					a_output = float64(a_input)
+				}
+			}
+			output_img.Set(i, j, color.NRGBA{
+				R: uint8(red_output),
+				G: uint8(green_output),
+				B: uint8(blue_output),
+				A: uint8(a_output),
+			})
+		}
+	}
+
 	fmt.Println(conv_kernel)
 }
 
@@ -74,7 +117,7 @@ func main() {
 	}
 	width := loadedImage.Bounds().Max.X
 	height := loadedImage.Bounds().Max.Y
-	radius := 3
+	radius := 5
 
 	output_img := image.NewNRGBA(image.Rect(0, 0, width, height))
 
