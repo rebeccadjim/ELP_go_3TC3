@@ -77,17 +77,17 @@ func gaussian_blur(loadedImage image.Image, output_img *image.NRGBA, width int, 
 					gaussian_coefficient := conv_kernel[x+radius][y+radius]
 					x_substitue := x
 					y_substitue := y
-					for i+x_substitue < 0 {
-						x_substitue++
+					if i+x_substitue < 0 {
+						x_substitue = -i
 					}
-					for j+y_substitue < 0 {
-						y_substitue++
+					if j+y_substitue < 0 {
+						y_substitue = -j
 					}
-					for i+x_substitue >= width {
-						x_substitue--
+					if i+x_substitue >= width {
+						x_substitue = width - i - 1
 					}
-					for j+y_substitue >= height {
-						y_substitue--
+					if j+y_substitue >= height {
+						y_substitue = height - j - 1
 					}
 
 					image_colors := loadedImage.At(i+x_substitue, j+y_substitue)
