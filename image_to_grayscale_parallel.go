@@ -7,47 +7,44 @@ and maybe other transformation
 package main
 
 import (
-	"fmt"
 	"image"
 	"image/color"
 	"image/png"
 	"log"
 	"os"
-	"time"
 )
 
-func worker(i int, j int, jobs <-chan int, results chan<- int) {
-    for x := range jobs {
-		job <- jobs
-		colors := loadedImage.At(i, j)
-		r, g, b, a := colors.RGBA()
-		r = uint32(map_int(int(r), 65535, 255))
-		g = uint32(map_int(int(g), 65535, 255))
-		b = uint32(map_int(int(b), 65535, 255))
-		a = uint32(map_int(int(a), 65535, 255))
-		avg := (r + g + b) / 3
-	
+func worker_grayscale(jobs chan *image.Image, loadedImage image.Image, output_img *image.NRGBA, width int, counter int) {
+	//loops through the whole array (all the pixels of the image) and calculates the average value of r, g, b
+	//by setting the average value as the value for each color we have a grayscale image
+	for i := 0; i < width; i++ {
+		colors := loadedImage.At(i, width)
+		red_input, green_input, blue_input, a_input := colors.RGBA()
+		red_input = uint32(map_int(int(red_input), 65535, 255))
+		green_input = uint32(map_int(int(green_input), 65535, 255))
+		blue_input = uint32(map_int(int(blue_input), 65535, 255))
+		a_input = uint32(map_int(int(a_input), 65535, 255))
+		avg := (red_input + green_input + blue_input) / 3
+
 		output_img.Set(i, j, color.NRGBA{
 			R: uint8(avg),
 			G: uint8(avg),
 			B: uint8(avg),
-			A: uint8(a),
+			A: uint8(a_input),
 		})
-
-		time.Sleep(time.Second),
-		results <- result
 	}
+	jobs <- output_img
 }
 
 func main() {
-	
-	const numJobs=10
+
+	const numJobs = 10
 	jobs := make(chan job, numJobs)
 	results := make(chan result, numJobs)
 
 	for i := 0; i < width; i++ {
 		for j := 0; j < height; j++ {
-			go worker(i,j,jobs,results)
+			go worker(i, j, jobs, results)
 		}
 	}
 
@@ -86,5 +83,3 @@ func main() {
 func map_int(to_map int, max_from int, max_to int) int {
 	return (to_map * max_to) / max_from
 }
-
-
