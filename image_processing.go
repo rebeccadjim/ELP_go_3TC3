@@ -13,9 +13,55 @@ import (
 	"image/png"
 	"log"
 	"math"
+	"net"
 	"os"
 	"strconv"
+	"time"
 )
+
+func handle_connection(conn net.Conn) {
+	rec := make([]byte, 1024)
+
+	_, err := conn.Read(rec)
+	fmt.Println(rec)
+
+	if err != nil {
+		fmt.Println("error read server")
+	}
+	msg := string(rec)
+	fmt.Println("I am the server and I am printing1", msg)
+	// fmt.Println("I am the server and I am printing2", rec)
+}
+
+func TCP_server() {
+	ln, err := net.Listen("tcp", ":8080")
+	if err != nil {
+		fmt.Println("error listen")
+	}
+	defer ln.Close()
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			// handle error
+			fmt.Println("error accept")
+		}
+		go handle_connection(conn)
+	}
+}
+
+func TCP_client() {
+	conn, err := net.Dial("tcp", "localhost:8080")
+	if err != nil {
+		// handle error
+		fmt.Println("error dial")
+	}
+	fmt.Fprintln(conn)
+	buffer := []byte("ABC\n")
+	fmt.Println("I am the client and I am printing1", string(buffer))
+	fmt.Println("I am the client and I am printing2", buffer)
+	conn.Write(buffer)
+	conn.Close()
+}
 
 func grayscale(loadedImage image.Image, output_img *image.NRGBA, width int, height int) {
 	//loops through the whole array (all the pixels of the image) and calculates the average value of r, g, b
@@ -173,6 +219,9 @@ func main() {
 	}
 
 	fmt.Println("Image generated at", output_path)
+	go TCP_server()
+	time.Sleep(4 * time.Second)
+	TCP_client()
 }
 
 func map_int(to_map int, max_from int, max_to int) int {
