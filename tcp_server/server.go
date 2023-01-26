@@ -26,18 +26,18 @@ func handle_connection(conn net.Conn) {
 
 		if err != nil {
 			fmt.Println("error read server")
+			opened = false
 		}
 		msg := string(rec)
+		 
 		data_array = strings.Split(msg, "\n")
-		fmt.Println("dataray", data_array[:])
-
+		
 		for i := 0; i < len(data_array); i++ {
 			s := data_array[i]
 			msg_array = strings.Split(s, " ")
 
-			if msg_array[0] == "end" {
+			if msg_array[0] == "end\n" {
 				opened = false
-				break
 			} else if msg_array[0] == "dimensions" {
 				width, err = strconv.Atoi(msg_array[1])
 				if err != nil {
@@ -48,10 +48,8 @@ func handle_connection(conn net.Conn) {
 					fmt.Println("error converting height")
 				}
 				output_img = image.NewNRGBA(image.Rect(0, 0, width, height))
-				fmt.Println("Dimensions ok:", width, height)
 
 			} else if len(msg_array) > 1 {
-				fmt.Println("inelse", msg_array[:], len(msg_array))
 				i, err := strconv.Atoi(msg_array[0])
 				if err != nil {
 					fmt.Println("error converting i")
@@ -83,7 +81,7 @@ func handle_connection(conn net.Conn) {
 					B: uint8(B),
 					A: uint8(A),
 				})
-
+				conn.Write([]byte("ok"))
 			}
 		}
 	}

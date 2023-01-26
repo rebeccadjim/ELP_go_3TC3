@@ -2,7 +2,7 @@ package main
 
 import (
 	// "fmt"
-	"fmt"
+	// "fmt"
 	"image"
 	"image/png"
 	"log"
@@ -16,6 +16,7 @@ func TCP_client(image image.Image, width, height int) {
 	servAddr := "localhost:8080"
 	tcpAddr, err := net.ResolveTCPAddr("tcp", servAddr)
 	var msg string
+	buffer := make([]byte, 1024)
 	if err != nil {
 		println("ResolveTCPAddr failed:", err.Error())
 		os.Exit(1)
@@ -56,6 +57,10 @@ func TCP_client(image image.Image, width, height int) {
 				os.Exit(1)
 			}
 
+			conn.Read(buffer)
+			// if msg_rec != "ok" {
+			// 	break
+			// }
 			// fmt.Println(msg)
 		}
 	}
@@ -88,7 +93,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(loadedImage.At(0, 0))
 	width := loadedImage.Bounds().Max.X
 	height := loadedImage.Bounds().Max.Y
 
