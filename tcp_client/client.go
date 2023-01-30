@@ -2,17 +2,21 @@ package main
 
 import (
 	// "fmt"
-	// "fmt"
+	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"log"
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	// "reflect"
 )
 
-func TCP_client(image image.Image, width, height int) {
+var output_img *image.NRGBA
+
+func TCP_client(input_image image.Image, width, height int) {
 	servAddr := "localhost:8080"
 	tcpAddr, err := net.ResolveTCPAddr("tcp", servAddr)
 	var msg string
@@ -37,7 +41,7 @@ func TCP_client(image image.Image, width, height int) {
 
 	for i := 0; i < width; i++ {
 		for j := 0; j < height; j++ {
-			imageColors := image.At(i, j)
+			imageColors := input_image.At(i, j)
 			R_i, G_i, B_i, A_i := imageColors.RGBA()
 
 			R := uint32(map_int(int(R_i), 65535, 255))
@@ -63,13 +67,87 @@ func TCP_client(image image.Image, width, height int) {
 			// }
 			// fmt.Println(msg)
 		}
-	}
 
-	msg = "end"
+	}
+	msg = "end\n"
 	_, err = conn.Write([]byte(msg))
 	if err != nil {
 		println("Write to server failed:", err.Error())
 		os.Exit(1)
+	}
+
+	opened := true
+	var data_array, msg_array []string
+	output_img = image.NewNRGBA(image.Rect(0, 0, width, height))
+	for opened {
+		_, err := conn.Read(buffer)
+
+		if err != nil {
+			fmt.Println("error read client")
+			opened = false
+		}
+
+		msg := string(buffer)
+
+		data_array = strings.Split(msg, "\n")
+
+		for i := 0; i < len(data_array); i++ {
+			s := data_array[i]
+			msg_array = strings.Split(s, " ")
+
+			if msg_array[0] == "end" {
+				opened = false
+			} else if msg_array[0] == "dimensions" {
+				continue
+			} else if len(msg_array) == 6 {
+				fmt.Println(msg_array)
+				i, err := strconv.Atoi(msg_array[0])
+				if err != nil {
+					fmt.Println("error converting i")
+				}
+				j, err := strconv.Atoi(msg_array[1])
+				if err != nil {
+					fmt.Println("error converting j")
+				}
+				R, err := strconv.ParseUint(msg_array[2], 10, 64)
+				if err != nil {
+					fmt.Println("error converting R")
+				}
+				G, err := strconv.ParseUint(msg_array[3], 10, 64)
+				if err != nil {
+					fmt.Println("error converting G")
+				}
+				B, err := strconv.ParseUint(msg_array[4], 10, 64)
+				if err != nil {
+					fmt.Println("error converting B")
+				}
+				A, err := strconv.ParseUint(msg_array[5], 10, 64)
+				if err != nil {
+					fmt.Println("error converting A")
+				}
+
+				output_img.Set(i, j, color.NRGBA{
+					R: uint8(R),
+					G: uint8(G),
+					B: uint8(B),
+					A: uint8(A),
+				})
+				conn.Write([]byte("ok"))
+			}
+		}
+	}
+	f, err := os.Create("image.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := png.Encode(f, output_img); err != nil {
+		f.Close()
+		log.Fatal(err)
+	}
+
+	if err := f.Close(); err != nil {
+		log.Fatal(err)
 	}
 
 	defer conn.Close()
