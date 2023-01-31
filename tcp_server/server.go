@@ -132,7 +132,7 @@ func handle_connection(conn net.Conn) {
 	var width, height int
 
 	for opened {
-		rec := make([]byte, 1024)
+		rec := make([]byte, 2048)
 
 		_, err := conn.Read(rec)
 
@@ -143,6 +143,7 @@ func handle_connection(conn net.Conn) {
 		msg := string(rec)
 
 		data_array = strings.Split(msg, "\n")
+		// fmt.Println(data_array, len(data_array))
 
 		for i := 0; i < len(data_array); i++ {
 			s := data_array[i]
@@ -194,9 +195,9 @@ func handle_connection(conn net.Conn) {
 					B: uint8(B),
 					A: uint8(A),
 				})
-				conn.Write([]byte("ok"))
 			}
 		}
+		conn.Write([]byte("ok"))
 	}
 
 	fmt.Println("Reached end of read")
@@ -275,9 +276,8 @@ func handle_connection(conn net.Conn) {
 	if err := f_final.Close(); err != nil {
 		log.Fatal(err)
 	}
-
-	var msg string
-	buffer := make([]byte, 1024)
+	msg := ""
+	count := 0
 	for i := 0; i < width; i++ {
 		for j := 0; j < height; j++ {
 			imageColors := final_output_img.At(i, j)
@@ -288,27 +288,29 @@ func handle_connection(conn net.Conn) {
 			B := uint32(map_int(int(B_i), 65535, 255))
 			A := uint32(map_int(int(A_i), 65535, 255))
 
-			msg = strconv.Itoa(i) + " " + strconv.Itoa(j) + " "
+			msg += strconv.Itoa(i) + " " + strconv.Itoa(j) + " "
 			msg += strconv.FormatUint(uint64(R), 10) + " "
 			msg += strconv.FormatUint(uint64(G), 10) + " "
 			msg += strconv.FormatUint(uint64(B), 10) + " "
 			msg += strconv.FormatUint(uint64(A), 10) + "\n"
 
-			_, err = conn.Write([]byte(msg))
-			if err != nil {
-				println("Write to server failed:", err.Error())
-				os.Exit(1)
+			count++
+			
+			if count > 64 || (i == width-1 && j == height-1) {
+				_, err = conn.Write([]byte(msg))
+				if err != nil {
+					println("Write to server failed:", err.Error())
+					os.Exit(1)
+				}
+				// fmt.Println(msg)
+				count = 0
+				msg = ""
+				var buff = make([]byte, 2048)
+				conn.Read(buff)
 			}
-
-			fmt.Println(msg)
-
-			conn.Read(buffer)
-			// if msg_rec != "ok" {
-			// 	break
-			// }
-			// fmt.Println(msg)
 		}
 	}
+
 	msg = "end\n"
 	_, err = conn.Write([]byte(msg))
 	if err != nil {

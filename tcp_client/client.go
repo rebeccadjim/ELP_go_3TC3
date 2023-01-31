@@ -20,7 +20,7 @@ func TCP_client(input_image image.Image, width, height int) {
 	servAddr := "localhost:8080"
 	tcpAddr, err := net.ResolveTCPAddr("tcp", servAddr)
 	var msg string
-	buffer := make([]byte, 1024)
+	buffer := make([]byte, 2048)
 	if err != nil {
 		println("ResolveTCPAddr failed:", err.Error())
 		os.Exit(1)
@@ -39,8 +39,12 @@ func TCP_client(input_image image.Image, width, height int) {
 		os.Exit(1)
 	}
 
+	count := 0
+	msg = ""
+
 	for i := 0; i < width; i++ {
 		for j := 0; j < height; j++ {
+
 			imageColors := input_image.At(i, j)
 			R_i, G_i, B_i, A_i := imageColors.RGBA()
 
@@ -49,19 +53,25 @@ func TCP_client(input_image image.Image, width, height int) {
 			B := uint32(map_int(int(B_i), 65535, 255))
 			A := uint32(map_int(int(A_i), 65535, 255))
 
-			msg = strconv.Itoa(i) + " " + strconv.Itoa(j) + " "
+			msg += strconv.Itoa(i) + " " + strconv.Itoa(j) + " "
 			msg += strconv.FormatUint(uint64(R), 10) + " "
 			msg += strconv.FormatUint(uint64(G), 10) + " "
 			msg += strconv.FormatUint(uint64(B), 10) + " "
 			msg += strconv.FormatUint(uint64(A), 10) + "\n"
 
-			_, err = conn.Write([]byte(msg))
-			if err != nil {
-				println("Write to server failed:", err.Error())
-				os.Exit(1)
-			}
+			count++
 
-			conn.Read(buffer)
+			if count > 64 || (i == width-1 && j == height-1) {
+				_, err = conn.Write([]byte(msg))
+				if err != nil {
+					println("Write to server failed:", err.Error())
+					os.Exit(1)
+				}
+				// fmt.Println(msg, len(msg))
+				count = 0
+				msg = ""
+				conn.Read(buffer)
+			}
 			// if msg_rec != "ok" {
 			// 	break
 			// }
@@ -80,19 +90,23 @@ func TCP_client(input_image image.Image, width, height int) {
 	var data_array, msg_array []string
 	output_img = image.NewNRGBA(image.Rect(0, 0, width, height))
 	for opened {
-		_, err := conn.Read(buffer)
+		var buffer2 = make([]byte, 2048)
+		_, err := conn.Read(buffer2)
 
 		if err != nil {
 			fmt.Println("error read client")
 			opened = false
 		}
 
-		msg := string(buffer)
+		msg := string(buffer2)
+		// fmt.Println(msg)
 
 		data_array = strings.Split(msg, "\n")
+		// fmt.Println(data_array)
 
-		for i := 0; i < len(data_array); i++ {
-			s := data_array[i]
+		for k := 0; k < len(data_array); k++ {
+			s := data_array[k]
+			// fmt.Println(s, data_array[i])
 			msg_array = strings.Split(s, " ")
 
 			if msg_array[0] == "end" {
@@ -100,10 +114,9 @@ func TCP_client(input_image image.Image, width, height int) {
 			} else if msg_array[0] == "dimensions" {
 				continue
 			} else if len(msg_array) == 6 {
-				fmt.Println(msg_array)
 				i, err := strconv.Atoi(msg_array[0])
 				if err != nil {
-					fmt.Println("error converting i")
+					fmt.Println("error converting i", msg_array, s, data_array[k])
 				}
 				j, err := strconv.Atoi(msg_array[1])
 				if err != nil {
@@ -132,9 +145,9 @@ func TCP_client(input_image image.Image, width, height int) {
 					B: uint8(B),
 					A: uint8(A),
 				})
-				conn.Write([]byte("ok"))
 			}
 		}
+		conn.Write([]byte("ok"))
 	}
 	f, err := os.Create("image.png")
 	if err != nil {
