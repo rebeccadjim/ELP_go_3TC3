@@ -1,11 +1,28 @@
-# ELP_go_3TC
+# Gaussian blur server
 
-This is our repository for the GO project of the ELP module
-
-The goal is to create a go script that can apply effects on an image, such as a grayscale filter or a gaussian blur. The script also has to use go routines to parallelise the task.
+A server that takes an image from a client via a socket, and sends back the image blurred by a parallelized gaussian blur algorithm.
 
 ## Usage
-To run : ```go run image_processing.go effect [parameter]``` effect is either gaussian_blur or grayscale, parameter is the radius (strength) for the gaussian blur.
+
+### Server
+
+To run the server:
+
+```shell
+cd server
+go run server.go
+``` 
+
+### Client
+
+To run the client:
+
+```shell
+cd client
+go run client.go {image_path}
+```
+
+Where {image_path} is the path of the image you want to blur. It will then be saved in the current directory.
 
 ## Team
 [Rebecca Djimtoingar](https://github.com/rebeccadjim) and [Valentin Jossic](https://github.com/vqlion)
