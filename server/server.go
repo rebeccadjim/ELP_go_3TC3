@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"image/png"
-	"log"
 	"math"
 	"net"
 	"os"
@@ -13,12 +11,7 @@ import (
 	"strings"
 )
 
-var first_output_img *image.NRGBA
-var final_output_img *image.NRGBA
-
-var numGoroutines = 8
-
-var running bool
+var numGoroutines = 12
 
 type matrix_elem struct {
 	index_i int
@@ -64,9 +57,9 @@ func create_convolution_kernel(radius int) [][]float64 {
 	return conv_kernel
 }
 
-func gaussian_blur_worker(jobChan chan matrix_elem, resultChan chan Pixel, loadedImage image.Image, conv_kernel [][]float64, radius, width, height int) {
+func gaussian_blur_worker(jobChan chan matrix_elem, resultChan chan Pixel, loadedImage image.Image, conv_kernel [][]float64, radius, width, height int, running *bool) {
 
-	for running {
+	for *running {
 		elem := <-jobChan
 		i := elem.index_i
 		j := elem.index_j
@@ -123,14 +116,57 @@ func gaussian_blur_worker(jobChan chan matrix_elem, resultChan chan Pixel, loade
 		resultChan <- pixel
 
 	}
-
 }
 
 func handle_connection(conn net.Conn) {
-	var data_array, msg_array []string
-	opened := true
-	var width, height int
+	fmt.Println("New connection from client", conn.RemoteAddr())
+	var width, height, client_image = receive_image(conn)
+	output_image := image.NewNRGBA(image.Rect(0, 0, width, height))
 
+	numJobs := 20
+	jobChan := make(chan matrix_elem, numJobs)
+	resultChan := make(chan Pixel, numJobs)
+
+	gaussian_radius := 10
+	conv_kernel := create_convolution_kernel(gaussian_radius)
+	var running bool = true
+
+	for x := 0; x <= numGoroutines; x++ {
+		go gaussian_blur_worker(jobChan, resultChan, client_image, conv_kernel, gaussian_radius, width, height, &running)
+	}
+
+	go func() {
+		for i := 0; i <= width; i++ {
+			for j := 0; j <= height; j++ {
+				elem := matrix_elem{
+					index_i: i,
+					index_j: j,
+				}
+				jobChan <- elem
+			}
+		}
+	}()
+
+	for i := 0; i <= width; i++ {
+		for j := 0; j <= height; j++ {
+			r := <-resultChan
+			output_image.Set(r.index_i, r.index_j, r.pigment)
+		}
+	}
+
+	running = false
+	close(jobChan)
+	defer close(resultChan)
+
+	send_image(conn, output_image, width, height)
+	fmt.Println("Image sent back to client", conn.RemoteAddr())
+}
+
+func receive_image(conn net.Conn) (int, int, *image.NRGBA) {
+	var opened bool = true
+	var data_array, msg_array []string
+	var width, height int
+	var output *image.NRGBA
 	for opened {
 		rec := make([]byte, 2048)
 
@@ -150,7 +186,6 @@ func handle_connection(conn net.Conn) {
 			msg_array = strings.Split(s, " ")
 
 			if msg_array[0] == "end" {
-				fmt.Println("Reached end")
 				opened = false
 			} else if msg_array[0] == "dimensions" {
 				width, err = strconv.Atoi(msg_array[1])
@@ -161,7 +196,7 @@ func handle_connection(conn net.Conn) {
 				if err != nil {
 					fmt.Println("error converting height")
 				}
-				first_output_img = image.NewNRGBA(image.Rect(0, 0, width, height))
+				output = image.NewNRGBA(image.Rect(0, 0, width, height))
 
 			} else if len(msg_array) > 1 {
 				i, err := strconv.Atoi(msg_array[0])
@@ -189,7 +224,7 @@ func handle_connection(conn net.Conn) {
 					fmt.Println("error converting A")
 				}
 
-				first_output_img.Set(i, j, color.NRGBA{
+				output.Set(i, j, color.NRGBA{
 					R: uint8(R),
 					G: uint8(G),
 					B: uint8(B),
@@ -199,88 +234,15 @@ func handle_connection(conn net.Conn) {
 		}
 		conn.Write([]byte("ok"))
 	}
+	return width, height, output
+}
 
-	fmt.Println("Reached end of read")
-	f, err := os.Create("image.png")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err := png.Encode(f, first_output_img); err != nil {
-		f.Close()
-		log.Fatal(err)
-	}
-
-	if err := f.Close(); err != nil {
-		log.Fatal(err)
-	}
-
-	// var loadedImage image.Image
-
-	// existingImageFile, err := os.Open("image.png")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// // loadedImage, err = png.Decode(existingImageFile)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	numJobs := 20
-	jobChan := make(chan matrix_elem, numJobs)
-	resultChan := make(chan Pixel, numJobs)
-
-	final_output_img = image.NewNRGBA(image.Rect(0, 0, width, height))
-
-	gaussian_radius := 10
-
-	conv_kernel := create_convolution_kernel(gaussian_radius)
-	running = true
-	for x := 0; x <= numGoroutines; x++ {
-		go gaussian_blur_worker(jobChan, resultChan, first_output_img, conv_kernel, gaussian_radius, width, height)
-	}
-
-	go func() {
-		for i := 0; i <= width; i++ {
-			for j := 0; j <= height; j++ {
-				elem := matrix_elem{
-					index_i: i,
-					index_j: j,
-				}
-				jobChan <- elem
-			}
-		}
-	}()
-
-	for i := 0; i <= width; i++ {
-		for j := 0; j <= height; j++ {
-			r := <-resultChan
-			final_output_img.Set(r.index_i, r.index_j, r.pigment)
-		}
-	}
-
-	running = false
-	close(jobChan)
-	fmt.Println("Reached end of go routines")
-	f_final, err := os.Create("image_processed.png")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err := png.Encode(f_final, final_output_img); err != nil {
-		f_final.Close()
-		log.Fatal(err)
-	}
-
-	if err := f_final.Close(); err != nil {
-		log.Fatal(err)
-	}
+func send_image(conn net.Conn, output *image.NRGBA, width, height int) {
 	msg := ""
 	count := 0
 	for i := 0; i < width; i++ {
 		for j := 0; j < height; j++ {
-			imageColors := final_output_img.At(i, j)
+			imageColors := output.At(i, j)
 			R_i, G_i, B_i, A_i := imageColors.RGBA()
 
 			R := uint32(map_int(int(R_i), 65535, 255))
@@ -295,14 +257,13 @@ func handle_connection(conn net.Conn) {
 			msg += strconv.FormatUint(uint64(A), 10) + "\n"
 
 			count++
-			
+
 			if count > 64 || (i == width-1 && j == height-1) {
-				_, err = conn.Write([]byte(msg))
+				_, err := conn.Write([]byte(msg))
 				if err != nil {
 					println("Write to server failed:", err.Error())
 					os.Exit(1)
 				}
-				// fmt.Println(msg)
 				count = 0
 				msg = ""
 				var buff = make([]byte, 2048)
@@ -312,18 +273,19 @@ func handle_connection(conn net.Conn) {
 	}
 
 	msg = "end\n"
-	_, err = conn.Write([]byte(msg))
+	_, err := conn.Write([]byte(msg))
 	if err != nil {
 		println("Write to server failed:", err.Error())
 		os.Exit(1)
 	}
 }
 
-func TCP_server() *image.NRGBA {
+func main() {
 	ln, err := net.Listen("tcp", ":8080")
 	if err != nil {
 		fmt.Println("error listen")
 	}
+	fmt.Println("Server up and running on", ln.Addr().String())
 	defer ln.Close()
 	for {
 		conn, err := ln.Accept()
@@ -332,8 +294,4 @@ func TCP_server() *image.NRGBA {
 		}
 		go handle_connection(conn)
 	}
-}
-
-func main() {
-	TCP_server()
 }

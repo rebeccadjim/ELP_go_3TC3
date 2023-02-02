@@ -1,7 +1,6 @@
 package main
 
 import (
-	// "fmt"
 	"fmt"
 	"image"
 	"image/color"
@@ -11,16 +10,16 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	// "reflect"
+	"path/filepath"
 )
 
-var output_img *image.NRGBA
+func map_int(to_map int, max_from int, max_to int) int {
+	return (to_map * max_to) / max_from
+}
 
-func TCP_client(input_image image.Image, width, height int) {
+func TCP_client(input_image image.Image, width, height int) *image.NRGBA {
 	servAddr := "localhost:8080"
 	tcpAddr, err := net.ResolveTCPAddr("tcp", servAddr)
-	var msg string
-	buffer := make([]byte, 2048)
 	if err != nil {
 		println("ResolveTCPAddr failed:", err.Error())
 		os.Exit(1)
@@ -32,8 +31,19 @@ func TCP_client(input_image image.Image, width, height int) {
 		os.Exit(1)
 	}
 
+	send_image(conn, input_image, width, height)
+
+	defer conn.Close()
+
+	return receive_image(conn, width, height)
+}
+
+
+func send_image(conn net.Conn, input_image image.Image, width, height int) {
+	var msg string
+	buffer := make([]byte, 2048)
 	msg = "dimensions " + strconv.Itoa(width) + " " + strconv.Itoa(height) + "\n"
-	_, err = conn.Write([]byte(msg))
+	_, err := conn.Write([]byte(msg))
 	if err != nil {
 		println("Write to server failed:", err.Error())
 		os.Exit(1)
@@ -67,15 +77,10 @@ func TCP_client(input_image image.Image, width, height int) {
 					println("Write to server failed:", err.Error())
 					os.Exit(1)
 				}
-				// fmt.Println(msg, len(msg))
 				count = 0
 				msg = ""
 				conn.Read(buffer)
 			}
-			// if msg_rec != "ok" {
-			// 	break
-			// }
-			// fmt.Println(msg)
 		}
 
 	}
@@ -85,10 +90,12 @@ func TCP_client(input_image image.Image, width, height int) {
 		println("Write to server failed:", err.Error())
 		os.Exit(1)
 	}
+}
 
+func receive_image(conn net.Conn, width, height int) *image.NRGBA {
 	opened := true
 	var data_array, msg_array []string
-	output_img = image.NewNRGBA(image.Rect(0, 0, width, height))
+	output_img := image.NewNRGBA(image.Rect(0, 0, width, height))
 	for opened {
 		var buffer2 = make([]byte, 2048)
 		_, err := conn.Read(buffer2)
@@ -99,14 +106,11 @@ func TCP_client(input_image image.Image, width, height int) {
 		}
 
 		msg := string(buffer2)
-		// fmt.Println(msg)
 
 		data_array = strings.Split(msg, "\n")
-		// fmt.Println(data_array)
 
 		for k := 0; k < len(data_array); k++ {
 			s := data_array[k]
-			// fmt.Println(s, data_array[i])
 			msg_array = strings.Split(s, " ")
 
 			if msg_array[0] == "end" {
@@ -116,7 +120,7 @@ func TCP_client(input_image image.Image, width, height int) {
 			} else if len(msg_array) == 6 {
 				i, err := strconv.Atoi(msg_array[0])
 				if err != nil {
-					fmt.Println("error converting i", msg_array, s, data_array[k])
+					fmt.Println("error converting i")
 				}
 				j, err := strconv.Atoi(msg_array[1])
 				if err != nil {
@@ -149,31 +153,16 @@ func TCP_client(input_image image.Image, width, height int) {
 		}
 		conn.Write([]byte("ok"))
 	}
-	f, err := os.Create("image.png")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err := png.Encode(f, output_img); err != nil {
-		f.Close()
-		log.Fatal(err)
-	}
-
-	if err := f.Close(); err != nil {
-		log.Fatal(err)
-	}
-
-	defer conn.Close()
-}
-
-func map_int(to_map int, max_from int, max_to int) int {
-	return (to_map * max_to) / max_from
+	return output_img
 }
 
 func main() {
+	if len(os.Args) < 2 {
+		log.Fatal("Provide the image path as an argument")
+	}
 
 	// Read image from file that already exists
-	existingImageFile, err := os.Open("pic.png")
+	existingImageFile, err := os.Open(os.Args[1])
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -187,6 +176,19 @@ func main() {
 	width := loadedImage.Bounds().Max.X
 	height := loadedImage.Bounds().Max.Y
 
-	TCP_client(loadedImage, width, height)
+	output_image := TCP_client(loadedImage, width, height)
 
+	f, err := os.Create(existingImageFile.Name()[:len(existingImageFile.Name()) - len(filepath.Ext(existingImageFile.Name()))] + "_processed.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := png.Encode(f, output_image); err != nil {
+		f.Close()
+		log.Fatal(err)
+	}
+
+	if err := f.Close(); err != nil {
+		log.Fatal(err)
+	}
 }
